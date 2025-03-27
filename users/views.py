@@ -1,49 +1,52 @@
-from rest_framework.views import APIView
+from django.contrib.auth import get_user_model
+from django.contrib.auth import login, logout
 from rest_framework.response import Response
-from rest_framework import status
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth import authenticate
+from rest_framework import status, generics
+from rest_framework.permissions import AllowAny
+from rest_framework.views import APIView
+from rest_framework.authtoken.models import Token
 from .serializers import RegisterSerializer, LoginSerializer
 
-class RegisterAPIView(APIView):
-    def post(self, request):
-        serializer = RegisterSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            refresh = RefreshToken.for_user(user)
-            return Response({
-                "user": {
-                    "id": user.id,
-                    "username": user.username,
-                    "email": user.email
-                },
-                "refresh": str(refresh),
-                "access": str(refresh.access_token),
-            }, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+User = get_user_model()
+
+class RegisterView(generics.CreateAPIView):
+    serializer_class = RegisterSerializer
+    permission_classes = [AllowAny]
+
+    def perform_create(self, serializer):
+        user = serializer.save()
+        # Qeydiyyatdan keçən istifadəçi üçün avtomatik token yaradırıq
+        Token.objects.create(user=user)
+        return user
 
 
-class LoginAPIView(APIView):
+class LoginView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
-            username = serializer.validated_data['username']
-            password = serializer.validated_data['password']
-            user = authenticate(username=username, password=password)
+            user = serializer.validated_data['user']
+            login(request, user)  # Django session login
             
-            if user:
-                refresh = RefreshToken.for_user(user)
-                return Response({
-                    "user": {
-                        "id": user.id,
-                        "username": user.username,
-                        "email": user.email
-                    },
-                    "refresh": str(refresh),
-                    "access": str(refresh.access_token),
-                }, status=status.HTTP_200_OK)
-            return Response(
-                {"error": "Invalid credentials"}, 
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            # Tokeni alırıq və ya yenisini yaradırıq
+            token, created = Token.objects.get_or_create(user=user)
+            
+            response_data = {
+                'token': token.key,
+                'user_id': user.pk,
+                'username': user.username,
+                'message': 'Uğurlu giriş'
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class LogoutView(APIView):
+    def post(self, request):
+        # Tokeni silirik (əgər istifadə edirsinizsə)
+        if hasattr(request.user, 'auth_token'):
+            request.user.auth_token.delete()
+        
+        logout(request)  # Django session logout
+        return Response({"message": "Uğurlu çıxış"}, status=status.HTTP_200_OK)

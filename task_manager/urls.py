@@ -23,6 +23,7 @@ from rest_framework.authtoken import views
 from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
+from django.views.generic import TemplateView
 
 
 schema_view = get_schema_view(
@@ -38,8 +39,11 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include("tasks.urls")),
-    path('', include("users.urls")),
+    path('api/', include("tasks.urls")),
+    path('api/', include("users.urls")),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+    path('register.html', TemplateView.as_view(template_name="register.html"), name='register'),
+    path('login.html', TemplateView.as_view(template_name="login.html"), name='login'),
+    path('tasks.html', TemplateView.as_view(template_name="tasks.html"), name='tasks'),
 ]
